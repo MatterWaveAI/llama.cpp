@@ -33,9 +33,23 @@ def _butterfly_perms(n_stages: int, dim: int) -> tuple[Tensor, Tensor]:
     return perm, torch.argsort(perm, dim=-1)
 
 
-@ModelBase.register("GRTForCausalLM")
+@ModelBase.register("GRTForCausalLM", "GRTVLForConditionalGeneration")
 class GRTModel(TextModel):
     model_arch = gguf.MODEL_ARCH.GRT
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "text_config" in self.hparams and isinstance(self.hparams["text_config"], dict):
+            for k, v in self.hparams["text_config"].items():
+                self.hparams.setdefault(k, v)
+        # Normalize `model.language_model.*` keys from GRTVLForConditionalGeneration to `model.*`
+        remapped = {}
+        for k, v in self.model_tensors.items():
+            if k.startswith("model.visual."):
+                continue
+            nk = k.replace("model.language_model.", "model.", 1) if k.startswith("model.language_model.") else k
+            remapped[nk] = v
+        self.model_tensors = remapped
 
     def set_gguf_parameters(self):
         super().set_gguf_parameters()
